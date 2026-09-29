@@ -1,0 +1,2 @@
+// Copy to Production.local.xcconfig (gitignored) for local overrides.
+// Do NOT put secrets or signing values in any committed file.

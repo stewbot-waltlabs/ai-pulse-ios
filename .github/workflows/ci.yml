@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Swift package — build and test
+    # Package.swift declares swift-tools-version 6.2, which needs Xcode 26.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+
+      # AIPulseCore imports neither SwiftUI nor UIKit, so this runs without a
+      # simulator and is the fast signal.
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  app:
+    name: iOS app — build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # AIPulse.xcodeproj is gitignored: project.yml is the source of truth.
+      - name: Generate the project
+        run: xcodegen generate
+
+      # The destination is resolved at run time: runner images rotate the
+      # device list, so hard-coding a name is the fastest way to a red build
+      # that says nothing about the code.
+      - name: Pick a simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          name="$(xcrun simctl list devices available \
+            | grep -oE '^ +iPhone [^(]+' \
+            | sed -e 's/^ *//' -e 's/ *$//' \
+            | head -1)"
+          if [ -z "$name" ]; then
+            echo "::error::no iPhone simulator available on this runner"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Using $name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project AIPulse.xcodeproj \
+            -scheme AIPulse \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            build
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block credentials from being committed
+        run: |
+          set -euo pipefail
+          matches="$(git ls-files \
+            | grep -E '(^|/)(\.env(\..*)?$|.*service[-_]account.*\.json$|.*-sa\.json$|.*\.p8$|.*\.p12$|.*\.mobileprovision$)' \
+            | grep -v -E '(^|/)\.env\.example$' || true)"
+          if [ -n "$matches" ]; then
+            echo "::error::Credential-shaped files are tracked:"
+            echo "$matches"
+            exit 1
+          fi
+          echo "No credential files tracked."
+
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.21.2
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Gitleaks (full history)
+        run: gitleaks detect --source . --config .gitleaks.toml --redact --verbose

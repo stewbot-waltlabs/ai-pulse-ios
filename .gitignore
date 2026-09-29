@@ -1,0 +1,10 @@
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+AIPulse.xcodeproj/
+build/
+# Per-developer signing. Never commit a team id or an identity.
+Configs/Signing.local.xcconfig
+Configs/Signing.xcconfig
+Configs/Production.local.xcconfig

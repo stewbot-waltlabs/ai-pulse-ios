@@ -1,0 +1,3 @@
+// Copy to Configs/Signing.xcconfig (gitignored) for device signing, e.g.:
+//   DEVELOPMENT_TEAM = YOURTEAMID
+// No signing values belong in the repo.

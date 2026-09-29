@@ -1,0 +1,8 @@
+# Gitleaks configuration for the AI Pulse repository.
+#
+# Extends the upstream default rule set; no repository-specific exceptions.
+# (The template carried allowlist entries for a prior repository's history —
+# commits and paths that do not exist here — so they were removed.)
+
+[extend]
+useDefault = true
